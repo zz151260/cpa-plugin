@@ -421,7 +421,7 @@ func resolveAuthIndexAndID(authID string) (string, string) {
 	}
 	// Prefer O(list) name/id match before per-account host.auth.get (A-22).
 	// Multi-account files are qoderwork-<uid>.json; list Name/ID usually carry that.
-	wantName := "qoderwork-" + authID + ".json"
+	wantName := "qwenwork-" + authID + ".json"
 	for _, f := range files {
 		if f.AuthIndex == authID || f.ID == authID || f.Name == authID {
 			return f.AuthIndex, f.ID
@@ -485,7 +485,7 @@ func invalidateAccountCredits(authID, authUID string) {
 	if err != nil {
 		return
 	}
-	wantName := "qoderwork-" + authUID + ".json"
+	wantName := "qwenwork-" + authUID + ".json"
 	matchedByName := false
 	for _, f := range files {
 		if f.AuthIndex == authID || f.ID == authID || f.Name == authID {
@@ -525,7 +525,7 @@ func listEntryMatchesUID(f pluginapi.HostAuthFileEntry, uid, wantName string) bo
 		return true
 	}
 	base := strings.TrimSuffix(f.Name, ".json")
-	return strings.EqualFold(base, "qoderwork-"+uid)
+	return strings.EqualFold(base, "qwenwork-"+uid)
 }
 
 // enrichAuthMetadata builds Metadata map for AuthData (type/logo/note/disabled).

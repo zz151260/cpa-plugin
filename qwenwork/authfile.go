@@ -36,7 +36,7 @@ func sanitizeUIDForFileName(uid string) string {
 func authFileNameFor(sa *storedAuth) string {
 	if sa != nil {
 		if uid := sanitizeUIDForFileName(sa.Account.UID); uid != "" {
-			return "qoderwork-" + uid + ".json"
+			return "qwenwork-" + uid + ".json"
 		}
 	}
 	return authFileName
@@ -224,7 +224,7 @@ func isSafeAuthPath(path string) bool {
 	}
 	base := filepath.Base(path)
 	lower := strings.ToLower(base)
-	if !strings.HasPrefix(lower, "qoderwork-") && lower != "qoderwork.json" {
+	if !strings.HasPrefix(lower, "qwenwork-") && lower != "qwenwork.json" {
 		return false
 	}
 	if !strings.HasSuffix(lower, ".json") {

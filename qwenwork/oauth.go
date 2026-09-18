@@ -300,7 +300,7 @@ func pollDeviceToken(nonce, verifier string) (*deviceTokenResponse, bool, error)
 		return nil, false, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "QoderWork")
+	req.Header.Set("User-Agent", "QwenWork")
 	resp, err := sharedHTTPClient().Do(req)
 	if err != nil {
 		return nil, false, err

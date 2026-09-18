@@ -20,14 +20,14 @@
       ]
     },
     {
-      "id": "qoderwork",
-      "name": "QoderWork",
-      "description": "QoderWork CN (qoder.com.cn) provider for CLIProxyAPI: dual login (OAuth device authorization with auto pro-pack claim + PAT import), COSY-signed chat executor, dynamic model list, daily check-in with credit snapshot, token keepalive (deviceToken/jobToken prefix-routed, PAT fallback), accounts panel.",
+      "id": "qwenwork",
+      "name": "QwenWork",
+      "description": "QwenWorkCN (千问办公, gateway.qwenwork.cn) provider for CLIProxyAPI: dual login (OAuth device authorization with auto pro-pack claim + PAT import), COSY-signed chat executor, dynamic model list, daily check-in with credit snapshot, token keepalive (deviceToken/jobToken prefix-routed, PAT fallback), accounts panel.",
       "author": "Sliverkiss",
-      "version": "0.2.6",
+      "version": "0.5.0",
       "repository": "https://github.com/Sliverkiss/cpa-plugin",
       "logo": "https://raw.githubusercontent.com/DGZSbot/ai-icon/refs/heads/main/QoderWork.png",
-      "homepage": "https://github.com/Sliverkiss/cpa-plugin/tree/main/qoderwork",
+      "homepage": "https://github.com/Sliverkiss/cpa-plugin/tree/main/qwenwork",
       "license": "MIT",
       "tags": [
         "Provider",

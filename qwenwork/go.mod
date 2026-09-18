@@ -1,4 +1,4 @@
-module github.com/Sliverkiss/cpa-plugin/qoderwork
+module github.com/Sliverkiss/cpa-plugin/qwenwork
 
 go 1.26.0
 

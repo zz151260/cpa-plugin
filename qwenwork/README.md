@@ -1,4 +1,4 @@
-# QoderWork CPA 插件
+# QwenWork CPA 插件（千问办公）
 
 [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 QoderWork（qoder.com.cn，CN 区）Provider 插件：多账号 OAuth/PAT 双登录、动态模型、COSY 签名推理、每日签到、积分面板、token 自动保活。
 
@@ -13,7 +13,7 @@
 | **每日签到** | 面板手动签到（单账号/批量）+ 09:00/21:00 定时自动签到，签到后返回最新积分快照 |
 | **积分面板** | 账号卡片：昵称/积分/计划/签到状态/操作（签到/刷新/选用） |
 | **token 保活** | 22:00 定时刷新；按 token 前缀路由（drt- → deviceToken/refresh，jrt- → jobToken/refresh），PAT 永不劫持 OAuth 刷新 |
-| **auth 隔离** | 文件名前缀 `qoderwork-` 过滤，与 workbuddy 等其他插件互不干扰 |
+| **auth 隔离** | 文件名前缀 `qwenwork-` 过滤，与 workbuddy 等其他插件互不干扰 |
 
 ## 安装
 
@@ -22,15 +22,15 @@
 ```bash
 # 按你的平台下载（示例 linux/arm64）
 unzip qoderwork_0.2.6_linux_arm64.zip
-cp qoderwork.so /path/to/cliproxyapi/plugins/qoderwork.so
+cp qwenwork.so /path/to/cliproxyapi/plugins/qwenwork.so
 ```
 
 ### 从源码
 
 ```bash
-cd qoderwork
-CGO_ENABLED=1 go build -buildmode=c-shared -ldflags "-X main.version=0.2.6" -o qoderwork.so .
-cp qoderwork.so /path/to/cliproxyapi/plugins/
+cd qwenwork
+CGO_ENABLED=1 go build -buildmode=c-shared -ldflags "-X main.version=0.2.6" -o qwenwork.so .
+cp qwenwork.so /path/to/cliproxyapi/plugins/
 ```
 
 ### config.yaml
@@ -40,7 +40,7 @@ plugins:
   enabled: true
   dir: "plugins"
   configs:
-    qoderwork:
+    qwenwork:
       enabled: true
 
 # 模型别名（可选）
@@ -63,12 +63,12 @@ oauth-model-alias:
 ### 方式二：PAT 导入
 
 1. qoder.com.cn → 设置 → Personal Access Token → 创建（pt- 开头）
-2. 插件面板（`/v0/resource/plugins/qoderwork/panel`）→ 右上角「导入 QoderWork 凭证」→ 粘贴 PAT → 导入
+2. 插件面板（`/v0/resource/plugins/qwenwork/panel`）→ 右上角「导入 QwenWork 凭据」→ 粘贴 PAT → 导入
 3. 插件自动换 jobToken（jt-/jrt-）落盘
 
 ### 面板
 
-`/v0/resource/plugins/qoderwork/panel`（需 management key）
+`/v0/resource/plugins/qwenwork/panel`（需 management key）
 
 - 账号卡片：积分余额 / 计划 / 签到按钮（签到后返回最新积分）
 - 「全部签到」批量签到；自动签到开关（09:00/21:00）

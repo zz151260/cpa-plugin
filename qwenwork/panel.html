@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QoderWork 面板</title>
+<title>QwenWork 面板</title>
 <style>
 /* Theme tokens aligned with CPA management panel (key-policy / themes.scss):
    default :root = light (paper); data-theme=white | dark; embedded iframe syncs parent. */
@@ -171,7 +171,7 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
 </head>
 <body>
 <div class="wrap">
-  <h1>QoderWork 账号面板</h1>
+  <h1>QwenWork 账号面板</h1>
   <div class="sub">积分余额 · CN 每日签到（09:00/21:00）· 耗尽自动关</div>
   <div id="authBox" class="card" style="display:none;margin-bottom:16px">
     <div style="margin-bottom:8px;color:var(--mut)">需要管理密钥（management key）才能访问账号数据。从 CPA 主面板嵌入时会自动获取，无需输入。错误密钥请勿连点，避免 IP 封禁。</div>
@@ -181,7 +181,7 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
     </div>
   </div>
   <div class="bar">
-    <button class="sec" id="importBtn" onclick="openImportModal()">导入 QoderWork 凭证</button>
+    <button class="sec" id="importBtn" onclick="openImportModal()">导入 QwenWork 凭据</button>
     <button id="refreshBtn" onclick="load(true,this)">刷新数据</button>
     <button class="sec" onclick="checkinAll(this)">全部签到</button>
     
@@ -200,11 +200,11 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
 <div class="modal-mask" id="importModal" onclick="onImportMaskClick(event)">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
     <div class="modal-hd">
-      <h2 id="importModalTitle">导入 QoderWork 凭证</h2>
+      <h2 id="importModalTitle">导入 QwenWork 凭据</h2>
       <button type="button" class="modal-x" onclick="closeImportModal()" aria-label="关闭">×</button>
     </div>
     <div class="modal-bd">
-      <p class="hint">到 <a href="https://qoder.com.cn/settings/personal-access-tokens" target="_blank" rel="noopener">qoder.com.cn → 设置 → Personal Access Tokens</a> 创建一个 PAT（pt- 开头），粘贴到下方。插件会自动换取 jobToken 并保存为 <code>qoderwork-&lt;uid&gt;.json</code>。</p>
+      <p class="hint">到 <a href="https://qoder.com.cn/settings/personal-access-tokens" target="_blank" rel="noopener">qoder.com.cn → 设置 → Personal Access Tokens</a> 创建一个 PAT（pt- 开头），粘贴到下方。插件会自动换取 jobToken 并保存为 <code>qwenwork-&lt;uid&gt;.json</code>。</p>
       <input id="importPAT" type="password" placeholder="pt-xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" style="width:100%;padding:8px 10px;font-family:ui-monospace,monospace;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);"/>
       <p class="hint" style="margin-top:8px;opacity:0.7">PAT 长期有效（可在创建时设置过期时间）。插件存储 PAT 用于 jrt- 过期后自动续期，无需重新导入。</p>
     </div>
@@ -216,7 +216,7 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
 </div>
 <div class="toasts" id="toasts"></div>
 <script>
-const API = "/v0/management/plugins/qoderwork";
+const API = "/v0/management/plugins/qwenwork";
 
 /* ---------- management key acquisition (3 fallbacks, zero config) ----------
    1) CPA main panel localStorage "cli-proxy-auth" (XOR+base64, same-origin
@@ -227,7 +227,7 @@ const API = "/v0/management/plugins/qoderwork";
 const ENC_PREFIX = "enc::v1::";
 const SECRET_SALT = "cli-proxy-api-webui::secure-storage";
 const PANEL_STORE = "cli-proxy-auth";
-const SS_KEY = "qoderwork-mgmt-key";
+const SS_KEY = "qwenwork-mgmt-key";
 
 function _enc(t){return new TextEncoder().encode(t)}
 function _dec(b){return new TextDecoder().decode(b)}
@@ -348,7 +348,7 @@ function card(a){
     : (disabled?``:`<button class="sec" data-action="select" data-auth-index="${esc(a.auth_index)}">选用</button>`);
   const refreshBtn=`<button class="sec" data-action="refresh" data-auth-index="${esc(a.auth_index)}" title="刷新积分">刷新</button>`;
   const badges=(selected?`<span class="badge" style="background:var(--acc-ring);color:var(--acc);border-color:var(--acc)">使用中</span>`:"")+(disabled?`<span class="badge disabled">已禁用</span>`:"")+(exhausted?`<span class="badge exhausted">耗尽</span>`:"")+regionBadge+`<span class="badge ${esc(plan)}">${esc(a.plan||"-")}</span>`;
-  const display=(a.nickname||a.label||a.name||"").replace(/^qoderwork-?/i,"");
+  const display=(a.nickname||a.label||a.name||"").replace(/^qwenwork-?/i,"");
   const nick=display||("u"+(a.uid||"").slice(-8));
   return `<div class="card${selected?" selected":""}" data-region="${region}" data-auth="${esc(a.auth_index)}">
   <h2>${esc(nick)} <span style="display:flex;gap:6px;align-items:center">${badges}</span></h2>
@@ -621,9 +621,9 @@ async function load(force, btn){
     activeAuthId=d.active_auth||"";
     updateFilterCounts(accounts);
     if(!accounts.length){
-      g.innerHTML='<div class="loading">暂无 QoderWork 账号</div>';
+      g.innerHTML='<div class="loading">暂无 QwenWork 账号</div>';
       renderSummary([]);
-      if(force) toast("数据已刷新", "warn", "暂无 QoderWork 账号");
+      if(force) toast("数据已刷新", "warn", "暂无 QwenWork 账号");
       return;
     }
     g.innerHTML=accounts.map(card).join("");

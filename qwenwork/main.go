@@ -1,6 +1,6 @@
 // Package main implements the qoderwork CLIProxyAPI dynamic plugin.
 //
-// qoderwork wraps the QoderWork CN (qoder.com.cn) OpenAPI as a cliproxy
+// qwenwork wraps the QwenWorkCN (qoder.com.cn) OpenAPI as a cliproxy
 // provider: it exchanges a PAT for a jobToken, refreshes it, signs inference
 // requests with COSY, and exposes the standard chat-completions interface.
 // upstream /v2/chat/completions endpoint.
@@ -349,7 +349,7 @@ func wbRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             providerName,
 			Version:          version,
-			Author:           "Sliverkiss (based on qoderwork by lovingfish)",
+			Author:           "zz151260 (ported from qoderwork by Sliverkiss/lovingfish)",
 			GitHubRepository: "https://github.com/Sliverkiss/cpa-plugin",
 			Logo:             pluginLogoURL,
 			ConfigFields: []pluginapi.ConfigField{
@@ -639,7 +639,7 @@ func toAuthDataOpts(sa *storedAuth, cr *creditsSummary, disabled bool) pluginapi
 	if sa != nil {
 		if uid := sanitizeUIDForFileName(sa.Account.UID); uid != "" {
 			id = uid
-			fileName = "qoderwork-" + uid + ".json"
+			fileName = "qwenwork-" + uid + ".json"
 		}
 	}
 	label := labelForAuth(sa)
@@ -684,7 +684,7 @@ func handleExecExecute(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "payload parse: "+err.Error())
 		return nil, fmt.Errorf("payload parse: %w", err)
 	}
-	body, err := buildQoderBody(qwReq, upstreamModel, uiUserType(nil))
+	body, err := buildQwenBody(qwReq, upstreamModel, uiUserType(nil))
 	if err != nil {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
@@ -715,7 +715,7 @@ func handleExecExecute(raw []byte) ([]byte, error) {
 		reconcileAfterExecutorError(req.AuthID, statusCode, string(payload))
 		return nil, fmt.Errorf("upstream %d: %s", statusCode, truncateRedacted(string(payload), 200))
 	}
-	completion, err := aggregateQoderSSE(reader, req.Model)
+	completion, err := aggregateQwenSSE(reader, req.Model)
 	if err != nil {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, err.Error())
 		return nil, err
@@ -768,7 +768,7 @@ func handleExecStream(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "payload parse: "+err.Error())
 		return nil, fmt.Errorf("payload parse: %w", err)
 	}
-	body, err := buildQoderBody(qwReq, upstreamModel, uiUserType(nil))
+	body, err := buildQwenBody(qwReq, upstreamModel, uiUserType(nil))
 	if err != nil {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
@@ -782,7 +782,7 @@ func handleExecStream(raw []byte) ([]byte, error) {
 	// No async stream id → fall back to synchronous chunk collection.
 	if req.StreamID == "" {
 		collector := &sseUsageCollector{}
-		chunks, statusCode, errCollect := collectUpstreamStreamQoder(bodyStr, sa, upstreamModel, sseFramed, collector)
+		chunks, statusCode, errCollect := collectUpstreamStreamQwen(bodyStr, sa, upstreamModel, sseFramed, collector)
 		if errCollect != nil {
 			publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, statusCode, errCollect.Error())
 			return nil, errCollect

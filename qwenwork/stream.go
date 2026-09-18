@@ -151,11 +151,11 @@ func pumpUpstreamStream(httpReq *http.Request, cancel context.CancelFunc, stream
 	invalidateAccountCredits(authID, authUID)
 }
 
-// collectUpstreamStreamQoder is the QoderWork-flavoured synchronous fallback
+// collectUpstreamStreamQwen is the QoderWork-flavoured synchronous fallback
 // (no async stream id): drain the upstream nested SSE, unwrap the inner
 // OpenAI chunks, return them as a slice. The collector, when non-nil,
 // observes the unwrapped inner chunks for usage extraction.
-func collectUpstreamStreamQoder(bodyStr string, sa *storedAuth, modelKey string, sseFramed bool, collector *sseUsageCollector) ([]pluginapi.ExecutorStreamChunk, int, error) {
+func collectUpstreamStreamQwen(bodyStr string, sa *storedAuth, modelKey string, sseFramed bool, collector *sseUsageCollector) ([]pluginapi.ExecutorStreamChunk, int, error) {
 	httpReq, err := http.NewRequest(http.MethodPost, endpointChat, strings.NewReader(bodyStr))
 	if err != nil {
 		return nil, 0, err
@@ -384,7 +384,7 @@ func aggregateCompletion(r io.Reader, model string) ([]byte, error) {
 		created = time.Now().Unix()
 	}
 	result := map[string]any{
-		"id":      firstNonEmpty(respID, "chatcmpl-qoderwork"),
+		"id":      firstNonEmpty(respID, "chatcmpl-qwenwork"),
 		"object":  "chat.completion",
 		"created": created,
 		"model":   firstNonEmpty(respModel, model),
@@ -404,7 +404,7 @@ func aggregateCompletion(r io.Reader, model string) ([]byte, error) {
 	return out, nil
 }
 
-// aggregateQoderSSE folds QoderWork's nested SSE stream into a single
+// aggregateQwenSSE folds QoderWork's nested SSE stream into a single
 // OpenAI chat.completion object. The gateway emits frames shaped:
 //
 //	data:{"headers":{...},"body":"<json-string>","statusCodeValue":200,...}
@@ -415,7 +415,7 @@ func aggregateCompletion(r io.Reader, model string) ([]byte, error) {
 //
 // Terminal frames: data:{"body":"[DONE]"} followed by an event:finish line
 // with timing metadata (ignored).
-func aggregateQoderSSE(r io.Reader, model string) ([]byte, error) {
+func aggregateQwenSSE(r io.Reader, model string) ([]byte, error) {
 	// Unwrap the nested SSE into an inner plain-text stream of OpenAI chunks,
 	// then delegate to aggregateCompletion. We materialise the inner stream
 	// into memory because the gateway's SSE is short-lived (one chat call)
@@ -448,7 +448,7 @@ func aggregateQoderSSE(r io.Reader, model string) ([]byte, error) {
 		inner.WriteString("\n\n")
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("qoder SSE read: %w", err)
+		return nil, fmt.Errorf("qwen SSE read: %w", err)
 	}
 	return aggregateCompletion(strings.NewReader(inner.String()), model)
 }
