@@ -183,9 +183,9 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
   <div class="bar">
     <button class="sec" id="importBtn" onclick="openImportModal()">导入 QwenWork 凭据</button>
     <button id="refreshBtn" onclick="load(true,this)">刷新数据</button>
-    <button class="sec" onclick="checkinAll(this)">全部签到</button>
+    <button class="sec" id="checkinAllBtn" onclick="checkinAll(this)">全部签到</button>
     
-    <label class="toggle" title="仅 CN 账号 09:00 / 21:00"><input type="checkbox" id="autoToggle" onchange="toggleAuto(this.checked)"> 自动签到(CN)</label>
+    <label class="toggle" id="autoToggleWrap" title="仅 CN 账号 09:00 / 21:00"><input type="checkbox" id="autoToggle" onchange="toggleAuto(this.checked)"> 自动签到(CN)</label>
     <span class="toggle" id="svtime"></span>
   </div>
   <div class="filter-bar" id="filterBar">
@@ -300,14 +300,17 @@ function esc(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">
 function progressHTML(c){
   // total uses size when known; remain = spendable, used = cycle spend.
   // Check-in adds packs → size/remain go UP (grant). Chat spend → used goes UP, remain DOWN.
-  if(!c||(!(c.total_remain||0)&&!(c.total_used||0)&&!(c.total_size||0)))return '<div class="pb"><div class="pb-label"><span>可用积分</span><span class="spin"></span>加载中…</span></div><div class="pb-track"><div class="pb-bar" style="width:0%"></div></div></div>';
+  // org_remain is the enterprise shared pool: teammates draw on it too, so it is
+  // shown beside the personal balance rather than included in it.
+  if(!c||(!(c.total_remain||0)&&!(c.total_used||0)&&!(c.total_size||0)&&!(c.org_remain||0)))return '<div class="pb"><div class="pb-label"><span>可用积分</span><span class="spin"></span>加载中…</span></div><div class="pb-track"><div class="pb-bar" style="width:0%"></div></div></div>';
   const remain=c.total_remain||0, used=c.total_used||0;
   const size=c.total_size||(remain+used);
   const total=size>0?size:(remain+used);
   const pct=total>0?Math.round(used/total*100):0;
   let color='var(--ok)'; if(pct>60)color='var(--warn)'; if(pct>85)color='var(--err)';
   const when=c.fetched_at?` · 快照 ${esc(String(c.fetched_at).replace('T',' ').replace('Z',' UTC'))}`:'';
-  return `<div class="pb"><div class="pb-label"><span>可用 ${remain}</span><span>已用 ${used} · ${pct}%</span></div><div class="pb-track"><div class="pb-bar" style="width:${pct}%;background:${color}"></div></div><div class="pb-meta">剩余 ${remain} · 已用 ${used} · 额度池 ${total}${c.pack_count?` · ${c.pack_count} 个包`:''}${when}</div></div>`;
+  const org=c.org_remain?` · 组织共享池 ${c.org_remain}`:'';
+  return `<div class="pb"><div class="pb-label"><span>可用 ${remain}</span><span>已用 ${used} · ${pct}%</span></div><div class="pb-track"><div class="pb-bar" style="width:${pct}%;background:${color}"></div></div><div class="pb-meta">个人剩余 ${remain} · 已用 ${used} · 个人额度池 ${total}${c.pack_count?` · ${c.pack_count} 个包`:''}${org}${when}</div></div>`;
 }
 function bindCardActions(root){
   (root||document).querySelectorAll("[data-action]").forEach(btn=>{
@@ -335,14 +338,22 @@ function card(a){
   // CN: 签到 button + 领取Pro button
   // active=false means the upstream check-in activity is not enabled for
   // this account (e.g. Community plan). Show disabled button with '?'.
+  // QwenWorkCN exposes no check-in or pro-upgrade routes at all, so when the
+  // backend reports the feature absent both buttons are dropped rather than
+  // rendered dead — a permanent 404 is not something a user can act on.
   let actionHTML;
   const checked=ci.today_checked_in;
-  const ciActive=ci.active!==false; // absent=true (default active)
-  const btnClass=checked?"done":(ciActive?"sec":"done");
-  const btnText=checked?"已签到":(ciActive?"签到":"不可签");
-  const btnDisabled=(checked||!ciActive)?" disabled=\"disabled\"":"";
-  actionHTML=`<button class="${btnClass}" data-action="checkin" data-auth-index="${esc(a.auth_index)}"${btnDisabled}>${btnText}</button>`+
-    `<button class="sec" data-action="claim-pro" data-auth-index="${esc(a.auth_index)}" title="领取Pro升级包">领取Pro</button>`;
+  const ciSupported=ci.active!==undefined; // backend answered at all
+  if(ciSupported){
+    const ciActive=ci.active!==false;
+    const btnClass=checked?"done":(ciActive?"sec":"done");
+    const btnText=checked?"已签到":(ciActive?"签到":"不可签");
+    const btnDisabled=(checked||!ciActive)?" disabled=\"disabled\"":"";
+    actionHTML=`<button class="${btnClass}" data-action="checkin" data-auth-index="${esc(a.auth_index)}"${btnDisabled}>${btnText}</button>`+
+      `<button class="sec" data-action="claim-pro" data-auth-index="${esc(a.auth_index)}" title="领取Pro升级包">领取Pro</button>`;
+  } else {
+    actionHTML=``;
+  }
   const selectBtn=selected
     ? `<button class="done" disabled="disabled">使用中</button>`
     : (disabled?``:`<button class="sec" data-action="select" data-auth-index="${esc(a.auth_index)}">选用</button>`);
@@ -619,6 +630,12 @@ async function load(force, btn){
     const accounts=d.accounts||[];
     lastAccounts=accounts;
     activeAuthId=d.active_auth||"";
+    // QwenWorkCN serves no check-in activity, so hide the bulk check-in control
+    // and the auto-checkin toggle when no account reports the feature as
+    // present. `active` is undefined only when the backend never answered.
+    const anyCheckin=accounts.some(a=>a.checkin&&a.checkin.active!==undefined);
+    const cab=document.getElementById("checkinAllBtn"); if(cab) cab.style.display=anyCheckin?"":"none";
+    const atw=document.getElementById("autoToggleWrap"); if(atw) atw.style.display=anyCheckin?"":"none";
     updateFilterCounts(accounts);
     if(!accounts.length){
       g.innerHTML='<div class="loading">暂无 QwenWork 账号</div>';

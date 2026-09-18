@@ -35,6 +35,10 @@ type creditsSummary struct {
 	TotalSize int64 `json:"total_size"`
 	// PackCount is number of resource packages included in the aggregate.
 	PackCount int `json:"pack_count"`
+	// OrgRemain is the enterprise shared pool balance. It is surfaced on its own
+	// rather than folded into TotalRemain: several members draw from it, so
+	// treating it as personal headroom would overstate what this account can use.
+	OrgRemain int64 `json:"org_remain,omitempty"`
 	// FetchedAt is when this snapshot was taken (RFC3339). Upstream billing lag
 	// can make remain/used look "stuck" for minutes after chat; compare this
 	// timestamp — not only the numbers — when diagnosing frozen credits.

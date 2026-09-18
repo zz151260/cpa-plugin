@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -35,6 +36,12 @@ type checkinStatusResponse struct {
 	RewardExpiresAt    int64  `json:"rewardExpiresAt"` // s epoch
 }
 
+// errCheckinUnsupported marks the check-in endpoint as absent upstream.
+// QwenWorkCN serves no /sash/api/v1/me/daily-check-in/* routes (404), unlike
+// QoderWork which grants daily credits there. Callers use this to hide the
+// check-in UI instead of showing a button that can only fail.
+var errCheckinUnsupported = errors.New("checkin endpoint not provided by upstream")
+
 func fetchCheckinStatus(sa *storedAuth) (*checkinSummary, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -46,6 +53,9 @@ func fetchCheckinStatus(sa *storedAuth) (*checkinSummary, error) {
 	resp, err := hostHTTPDo(req)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errCheckinUnsupported
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("checkin status http %d body=%s", resp.StatusCode, truncateRedacted(string(resp.Body), 200))
@@ -75,32 +85,36 @@ func fetchCheckinStatus(sa *storedAuth) (*checkinSummary, error) {
 	return sum, nil
 }
 
-// quotaUsageResponse mirrors GET /api/v2/quota/usage response (plain JSON,
-// no envelope). Both userQuota (base credits) and addOnQuota (one-time pro
-// upgrade + checkin packs) are summed for the panel.
+// quotaUsageResponse mirrors GET /api/v2/quota/usage from the QwenWorkCN gateway.
+// The service returns snake_case keys (observed 2026-09-18); the QoderWork
+// original used camelCase, which silently decoded to zero values here.
+// org.remaining is the enterprise-wide pool and only exists for org members.
 type quotaUsageResponse struct {
-	UserID               string  `json:"userId"`
-	UserType             string  `json:"userType"`
-	UsageType            string  `json:"usageType"`
-	TotalUsagePercentage float64 `json:"totalUsagePercentage"`
-	IsQuotaExceeded      bool    `json:"isQuotaExceeded"`
-	ExpiresAt            int64   `json:"expiresAt"` // ms epoch
-	UpgradeURL           string  `json:"upgradeUrl"`
+	UserID               string  `json:"user_id"`
+	UserType             string  `json:"user_type"`
+	UsageType            string  `json:"usage_type"`
+	TotalUsagePercentage float64 `json:"total_usage_percentage"`
+	IsQuotaExceeded      bool    `json:"is_quota_exceeded"`
+	ExpiresAt            int64   `json:"expires_at"` // ms epoch
+	UpgradeURL           string  `json:"upgrade_url"`
 	UserQuota            struct {
 		Total     float64 `json:"total"`
 		Used      float64 `json:"used"`
 		Remaining float64 `json:"remaining"`
 		Unit      string  `json:"unit"`
-	} `json:"userQuota"`
+	} `json:"user_quota"`
 	AddOnQuota struct {
 		Total     float64 `json:"total"`
 		Used      float64 `json:"used"`
 		Remaining float64 `json:"remaining"`
-	} `json:"addOnQuota"`
+	} `json:"add_on_quota"`
+	Org struct {
+		Remaining float64 `json:"remaining"`
+	} `json:"org"`
 }
 
-// fetchUserResource queries QoderWork's quota endpoint and aggregates base +
-// add-on credits into the panel's creditsSummary shape.
+// fetchUserResource queries the QwenWorkCN quota endpoint and aggregates the
+// personal base pool plus any add-on pool into the panel's creditsSummary.
 func fetchUserResource(sa *storedAuth) (*creditsSummary, error) {
 	req, err := http.NewRequest(http.MethodGet, upstreamBaseCN+"/api/v2/quota/usage", nil)
 	if err != nil {
@@ -127,6 +141,15 @@ func fetchUserResource(sa *storedAuth) (*creditsSummary, error) {
 			{Name: "基础额度", Remain: int64(q.UserQuota.Remaining), Used: int64(q.UserQuota.Used), Size: int64(q.UserQuota.Total)},
 			{Name: "赠送/签到额度", Remain: int64(q.AddOnQuota.Remaining), Used: int64(q.AddOnQuota.Used), Size: int64(q.AddOnQuota.Total)},
 		},
+	}
+	// Org pool (enterprise plans only) is surfaced separately: it is shared with
+	// teammates, so folding it into the personal total would overstate headroom.
+	if q.Org.Remaining > 0 {
+		sum.OrgRemain = int64(q.Org.Remaining)
+		sum.PackCount = 3
+		sum.Packages = append(sum.Packages, packageSummary{
+			Name: "组织共享池", Remain: int64(q.Org.Remaining),
+		})
 	}
 	return sum, nil
 }
@@ -198,6 +221,11 @@ func isCreditsExhausted(cr *creditsSummary) bool {
 		return false
 	}
 	if cr.TotalRemain > 0 {
+		return false
+	}
+	// Enterprise members draw on the org pool once the personal allocation runs
+	// out, so a zero personal balance is not exhaustion while the org has credit.
+	if cr.OrgRemain > 0 {
 		return false
 	}
 	// remain==0: exhausted only when we know there was/is a package total

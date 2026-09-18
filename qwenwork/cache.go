@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -100,6 +101,11 @@ func cachedAccountDetails(authID string, sa *storedAuth, force bool) (plan strin
 		defer wg.Done()
 		if c, err := fetchCheckinStatus(sa); err == nil {
 			ci = c
+		} else if errors.Is(err, errCheckinUnsupported) {
+			// QwenWorkCN has no check-in routes; report "inactive" so the panel
+			// renders the state instead of a button that can only 404. Not an
+			// error worth surfacing — it is a permanent property of this service.
+			ci = &checkinSummary{Active: false}
 		} else {
 			addErr("checkin: " + err.Error())
 		}
