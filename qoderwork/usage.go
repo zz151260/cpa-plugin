@@ -120,14 +120,14 @@ func forwardUsageToCPAMP(alias, model, authID string, started time.Time, detail 
 	payload := map[string]any{
 		"timestamp":     ts.UTC().Format(time.RFC3339Nano),
 		"latency_ms":    latencyMs,
-		"source":        "qoderwork",
+		"source":        providerName,
 		"auth_index":    strings.TrimSpace(authID),
 		"provider":      providerName,
 		"model":         model,
 		"alias":         alias,
 		"endpoint":      "POST /v1/chat/completions",
 		"auth_type":     "oauth",
-		"executor_type": "qoderwork",
+		"executor_type": providerName,
 		"generate":      true,
 		"failed":        failed,
 		"tokens": map[string]any{
