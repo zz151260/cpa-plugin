@@ -1,4 +1,4 @@
-# Multi-arch CPA plugin build & release (workbuddy + qwenwork).
+# Multi-arch CPA plugin build & release (workbuddy + qoderwork + qwenwork).
 # Each plugin versions INDEPENDENTLY:
 #   - tag 'workbuddy-v*'  → release workbuddy at that version
 #   - tag 'qwenwork-v*'  → release qwenwork at that version
@@ -14,14 +14,14 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ["workbuddy-v*", "qwenwork-v*"]
+    tags: ["workbuddy-v*", "qoderwork-v*", "qwenwork-v*"]
   workflow_dispatch:
     inputs:
       plugin:
         description: "Plugin to release"
         required: true
         type: choice
-        options: [workbuddy, qwenwork]
+        options: [workbuddy, qoderwork, qwenwork]
       version:
         description: "Version without v (empty = plugin's VERSION file)"
         required: false
@@ -39,6 +39,7 @@ jobs:
       matrix:
         include:
           - dir: workbuddy
+          - dir: qoderwork
           - dir: qwenwork
     defaults:
       run:
@@ -97,7 +98,17 @@ jobs:
             goarch: amd64
             runner: ubuntu-24.04
             ext: so
+          - id: qoderwork
+            goos: linux
+            goarch: amd64
+            runner: ubuntu-24.04
+            ext: so
           - id: qwenwork
+            goos: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+            ext: so
+          - id: qoderwork
             goos: linux
             goarch: arm64
             runner: ubuntu-24.04-arm
@@ -107,12 +118,27 @@ jobs:
             goarch: amd64
             runner: macos-15-intel
             ext: dylib
+          - id: qoderwork
+            goos: darwin
+            goarch: amd64
+            runner: macos-15-intel
+            ext: dylib
           - id: qwenwork
             goos: darwin
             goarch: arm64
             runner: macos-15
             ext: dylib
+          - id: qoderwork
+            goos: darwin
+            goarch: arm64
+            runner: macos-15
+            ext: dylib
           - id: qwenwork
+            goos: windows
+            goarch: amd64
+            runner: windows-2025
+            ext: dll
+          - id: qoderwork
             goos: windows
             goarch: amd64
             runner: windows-2025
@@ -206,8 +232,12 @@ jobs:
             ext: so
           - id: qwenwork
             target: windows-arm64
+          - id: qoderwork
+            target: windows-arm64
             ext: dll
           - id: qwenwork
+            target: freebsd-amd64
+          - id: qoderwork
             target: freebsd-amd64
             ext: so
     defaults:
@@ -288,6 +318,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '') ||
       startsWith(github.ref, 'refs/tags/workbuddy-v') ||
+      startsWith(github.ref, 'refs/tags/qoderwork-v') ||
       startsWith(github.ref, 'refs/tags/qwenwork-v')
     needs:
       - build
@@ -307,6 +338,8 @@ jobs:
             V="${{ github.event.inputs.version }}"
           elif [[ "${GITHUB_REF_NAME}" == workbuddy-v* ]]; then
             P="workbuddy"; V="${GITHUB_REF_NAME#workbuddy-v}"
+          elif [[ "${GITHUB_REF_NAME}" == qoderwork-v* ]]; then
+            P="qoderwork"; V="${GITHUB_REF_NAME#qoderwork-v}"
           else
             P="qwenwork"; V="${GITHUB_REF_NAME#qwenwork-v}"
           fi

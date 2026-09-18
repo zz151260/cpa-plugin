@@ -71,14 +71,6 @@ func isSessionDeadError(msg string) bool {
 //   - legacy PAT accounts: POST /api/v1/jobToken/refresh with jrt-, falling
 //     back to jobToken/exchange with the PAT when the jrt- has expired.
 //
-// QwenWorkCN credentials (ory_rt_ refresh tokens) deliberately fall through to
-// the jobToken branch and fail. They must not be refreshed here: the gateway's
-// deviceToken/refresh returns a PERSONAL-context token regardless of the
-// credential's org (verified 2026-09-18 — an enterprise ory_rt_ came back as a
-// different personal uid), and it rotates the refresh chain, which destroys the
-// original enterprise session for good. Enterprise credentials therefore stay
-// in the desktop client and are re-exported with tools/make_auth.py instead.
-//
 // Returns the decoded data + raw body + status (raw needed for error
 // classification — doRawJSON collapses 4xx bodies into a generic error and
 // drops the business code, e.g. TOKEN_EXPIRE).
