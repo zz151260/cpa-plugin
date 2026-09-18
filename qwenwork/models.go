@@ -16,15 +16,19 @@ import (
 )
 
 // wbModels is the static fallback model list for QwenWorkCN. The service exposes
-// capability tiers rather than named models: "qwork-advanced" is the routable
-// tier and resolves to glm-5.2 upstream (confirmed by the X-Model-Name response
-// header); "qwork-lite" is rejected with 403 for the accounts tried so far.
+// capability tiers rather than named models, and only one tier is routable for
+// the accounts tested: "qwork-advanced", which resolves to glm-5.2 upstream
+// (confirmed by the X-Model-Name response header).
+//
+// "qwork-lite" is deliberately absent: the gateway answers
+// 403 "Model is not available for this user" for it, so listing it would only
+// offer a model that always fails. Add it back if an account reports access.
+//
 // Dynamic refresh via /algo/api/v2/model/list replaces this at runtime when an
 // account is present.
 func wbModels() []pluginapi.ModelInfo {
 	return []pluginapi.ModelInfo{
 		{ID: "qwork-advanced", Name: "QwenWork Advanced (glm-5.2)", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "qwork-lite", Name: "QwenWork Lite", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
 	}
 }
 
