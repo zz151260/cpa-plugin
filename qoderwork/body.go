@@ -17,30 +17,17 @@ import (
 //go:embed baseprompt.json
 var basepromptJSON []byte
 
-// cpaToUpstreamKey maps CPA-facing model names to upstream keys.
-// Unknown names pass through unchanged (server silently routes to auto).
+// cpaToUpstreamKey maps CPA-facing model names to the tier keys QwenWorkCN
+// recognises. The gateway routes tiers, not concrete models: "qwork-advanced"
+// lands on glm-5.2 / maas-glm (verified 2026-09-13 via the X-Model-Name response
+// header), while "qwork-lite" answers 403 "Model is not available for this user"
+// on an enterprise account. Unknown names pass through unchanged.
 func cpaToUpstreamKey(cpaModel string) string {
 	switch cpaModel {
-	case "qoder-auto", "auto":
-		return "auto"
-	case "qwen3.8-max-preview", "qwen3.8-max", "qmodel_preview":
-		return "qmodel_preview"
-	case "qwen3.7-max", "qmodel_latest":
-		return "qmodel_latest"
-	case "qwen3.7-plus", "qmodel":
-		return "qmodel"
-	case "qwen3.6-flash", "q36fmodel":
-		return "q36fmodel"
-	case "deepseek-v4-pro", "dmodel":
-		return "dmodel"
-	case "deepseek-v4-flash", "dfmodel":
-		return "dfmodel"
-	case "glm-5.2", "gm51model":
-		return "gm51model"
-	case "kimi-k2.7-code", "kmodel":
-		return "kmodel"
-	case "minimax-m2.7", "mmodel":
-		return "mmodel"
+	case "qwenwork-auto", "auto", "qwork-advanced", "qwork", "glm-5.2":
+		return "qwork-advanced"
+	case "qwork-lite", "lite":
+		return "qwork-lite"
 	}
 	return cpaModel
 }

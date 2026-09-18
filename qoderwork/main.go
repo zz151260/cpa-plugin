@@ -74,13 +74,17 @@ import (
 )
 
 const (
-	providerName  = "qoderwork"
-	authFileName  = "qoderwork.json"
+	providerName  = "qwenwork"
+	authFileName  = "qwenwork.json"
 	pluginLogoURL = "https://raw.githubusercontent.com/DGZSbot/ai-icon/refs/heads/main/QoderWork.png"
-	// QoderWork CN: OpenAPI for auth/billing, gateway for COSY-signed inference.
-	// See /root/qoderwork/KNOWLEDGE.md §1-§5.
-	upstreamBaseCN = "https://openapi.qoder.com.cn"
-	gatewayBaseCN  = "https://gateway.qoder.com.cn"
+	// QwenWorkCN (千问办公) is a DingTalk-published Qoder-family client. Unlike
+	// QoderWork, it serves auth/billing AND inference from the same gateway host.
+	// Verified 2026-09-13: business endpoints (/api/v1/userinfo,
+	// /api/v1/deviceToken/refresh) resolve on this host; jobToken/* returns 404
+	// and device/selectAccounts returns 400 INVALID_DEVICE_FLOW, so the
+	// device-authorization and PAT flows are both unavailable here.
+	upstreamBaseCN = "https://gateway.qwenwork.cn"
+	gatewayBaseCN  = "https://gateway.qwenwork.cn"
 	clientUA       = "Go-http-client/2.0"
 
 	// Auth endpoints (PAT → jobToken exchange + refresh).
@@ -95,9 +99,12 @@ const (
 	endpointCheckinClaim  = upstreamBaseCN + "/sash/api/v1/me/daily-check-in/claim"
 	endpointProUpgrade    = upstreamBaseCN + "/sash/api/v1/me/pro-upgrade/claim"
 
-	// Inference endpoints (COSY-signed + QoderEncoding body).
-	endpointChat   = gatewayBaseCN + "/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
-	endpointModels = gatewayBaseCN + "/algo/api/v2/model/list?Encode=1"
+	// Inference endpoints (COSY-signed, PLAINTEXT body).
+	// QwenWorkCN rejects QoderEncoding: the gateway accepts a plain JSON body and
+	// answers 400 "Invalid agent chat JSON body" when it is base91-wrapped. Hence
+	// no Encode=1 query flag here (unlike QoderWork).
+	endpointChat   = gatewayBaseCN + "/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common"
+	endpointModels = gatewayBaseCN + "/algo/api/v2/model/list"
 
 	// loginTTL bounds one device-authorization flow. Users may need to log in
 	// to qoder.com.cn first (Aliyun SSO) before authorizing — give them room.
@@ -541,12 +548,12 @@ func commonHeaders(req *http.Request) {
 // upstream model key (goes into x-model-key). sse toggles cache-control.
 //
 // Returns an error if the cosy session cannot be built (e.g. empty token).
-func applyCosyHeaders(req *http.Request, sa *storedAuth, encodedBody, rawURL, modelKey string, sse bool) error {
+func applyCosyHeaders(req *http.Request, sa *storedAuth, bodyStr, rawURL, modelKey string, sse bool) error {
 	sess, err := cosySessionFor(sa)
 	if err != nil {
 		return err
 	}
-	hdr, err := sess.headers(sa.Account.UID, encodedBody, rawURL, "text/event-stream", sse)
+	hdr, err := sess.headers(sa.Account.UID, bodyStr, rawURL, "text/event-stream", sse)
 	if err != nil {
 		return err
 	}
@@ -682,12 +689,14 @@ func handleExecExecute(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
 	}
-	encodedBody := qoderEncode(body)
-	httpReq, err := http.NewRequest(http.MethodPost, endpointChat, strings.NewReader(encodedBody))
+	// QwenWorkCN takes the body as plain JSON. QoderEncoding is a QoderWork-only
+	// wire optimisation and is rejected here (400 "Invalid agent chat JSON body").
+	bodyStr := string(body)
+	httpReq, err := http.NewRequest(http.MethodPost, endpointChat, strings.NewReader(bodyStr))
 	if err != nil {
 		return nil, err
 	}
-	if err := applyCosyHeaders(httpReq, sa, encodedBody, endpointChat, upstreamModel, true); err != nil {
+	if err := applyCosyHeaders(httpReq, sa, bodyStr, endpointChat, upstreamModel, true); err != nil {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "cosy: "+err.Error())
 		return nil, fmt.Errorf("cosy: %w", err)
 	}
@@ -764,7 +773,8 @@ func handleExecStream(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
 	}
-	encodedBody := qoderEncode(body)
+	// Plain JSON body — see handleExecExecute for why QoderEncoding is not used.
+	bodyStr := string(body)
 
 	headers := streamHeaders()
 	sseFramed := clientNeedsSSEFrame(req.Metadata)
@@ -772,7 +782,7 @@ func handleExecStream(raw []byte) ([]byte, error) {
 	// No async stream id → fall back to synchronous chunk collection.
 	if req.StreamID == "" {
 		collector := &sseUsageCollector{}
-		chunks, statusCode, errCollect := collectUpstreamStreamQoder(encodedBody, sa, upstreamModel, sseFramed, collector)
+		chunks, statusCode, errCollect := collectUpstreamStreamQoder(bodyStr, sa, upstreamModel, sseFramed, collector)
 		if errCollect != nil {
 			publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, statusCode, errCollect.Error())
 			return nil, errCollect
@@ -788,14 +798,14 @@ func handleExecStream(raw []byte) ([]byte, error) {
 	// client disconnects — otherwise the pump keeps reading a dead upstream until
 	// sharedHTTPClient's 120s timeout, holding a pool slot the whole time.
 	ctx, cancel := context.WithCancel(context.Background())
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointChat, strings.NewReader(encodedBody))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointChat, strings.NewReader(bodyStr))
 	if err != nil {
 		cancel()
 		streamEmitError(req.StreamID, err.Error())
 		streamClose(req.StreamID)
 		return okEnvelope(streamResponse{Headers: headers})
 	}
-	if err := applyCosyHeaders(httpReq, sa, encodedBody, endpointChat, upstreamModel, true); err != nil {
+	if err := applyCosyHeaders(httpReq, sa, bodyStr, endpointChat, upstreamModel, true); err != nil {
 		cancel()
 		streamEmitError(req.StreamID, "cosy: "+err.Error())
 		streamClose(req.StreamID)

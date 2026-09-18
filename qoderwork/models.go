@@ -15,22 +15,16 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
-// wbModels is the static fallback model list for QoderWork CN. Keys mirror
-// /root/qoderwork/models_list.json (KNOWLEDGE §6.2). Aliases use the qoder/
-// prefix in AuthAttributes; bare IDs work too. Dynamic refresh via
-// /algo/api/v2/model/list replaces this at runtime when an account is present.
+// wbModels is the static fallback model list for QwenWorkCN. The service exposes
+// capability tiers rather than named models: "qwork-advanced" is the routable
+// tier and resolves to glm-5.2 upstream (confirmed by the X-Model-Name response
+// header); "qwork-lite" is rejected with 403 for the accounts tried so far.
+// Dynamic refresh via /algo/api/v2/model/list replaces this at runtime when an
+// account is present.
 func wbModels() []pluginapi.ModelInfo {
 	return []pluginapi.ModelInfo{
-		{ID: "auto", Name: "Auto", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "qmodel_preview", Name: "Qwen3.8-Max-Preview", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "qmodel_latest", Name: "Qwen3.7-Max", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "qmodel", Name: "Qwen3.7-Plus", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "q36fmodel", Name: "Qwen3.6-Flash", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "dmodel", Name: "DeepSeek-V4-Pro", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "dfmodel", Name: "DeepSeek-V4-Flash", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "gm51model", Name: "GLM-5.2", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "kmodel", Name: "Kimi-K2.7-Code", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
-		{ID: "mmodel", Name: "MiniMax-M2.7", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
+		{ID: "qwork-advanced", Name: "QwenWork Advanced (glm-5.2)", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
+		{ID: "qwork-lite", Name: "QwenWork Lite", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
 	}
 }
 
@@ -109,15 +103,15 @@ func callModelsAPI(sa *storedAuth) ([]pluginapi.ModelInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	// model/list needs no body but COSY still requires a body string for signing.
-	// An empty JSON object works (verified in reference_impl.py).
-	encodedBody := qoderEncode([]byte("{}"))
-	rawURL := endpointModels // includes ?Encode=1
+	// An empty JSON object works (verified against the live gateway).
+	bodyStr := "{}"
+	rawURL := endpointModels
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	// COSY signing needs the encoded body even for GET (signature includes body).
-	if err := applyCosyHeaders(req, sa, encodedBody, rawURL, "", false); err != nil {
+	// COSY signing needs the body string even for GET (signature includes body).
+	if err := applyCosyHeaders(req, sa, bodyStr, rawURL, "", false); err != nil {
 		return nil, fmt.Errorf("cosy sign: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
