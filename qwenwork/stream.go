@@ -316,8 +316,22 @@ func aggregateCompletion(r io.Reader, model string) ([]byte, error) {
 		if v, ok := chunk["created"].(float64); ok {
 			created = int64(v)
 		}
+		// Usage arrives under "raw_usage" with the counts one level down in
+		// "data" (observed on the QwenWorkCN gateway):
+		//   "raw_usage":{"account_discount":0,"data":{"prompt_tokens":63,
+		//                "completion_tokens":43,"total_tokens":106},...}
+		// The plain "usage" key is accepted too for any upstream that sends the
+		// OpenAI-standard shape. Without this the completion reports zeros, and
+		// clients that gate their agent loop on usage stop after one turn.
 		if v, ok := chunk["usage"].(map[string]any); ok {
 			usage = v
+		}
+		if ru, ok := chunk["raw_usage"].(map[string]any); ok {
+			if inner, ok := ru["data"].(map[string]any); ok {
+				usage = inner
+			} else if usage == nil {
+				usage = ru
+			}
 		}
 		choices, _ := chunk["choices"].([]any)
 		for _, c := range choices {

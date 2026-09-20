@@ -235,6 +235,15 @@ func (c *sseUsageCollector) feed(rawJSON string) {
 	if u, ok := chunk["usage"].(map[string]any); ok && len(u) > 0 {
 		c.last = u
 	}
+	// QwenWorkCN sends the counts as raw_usage.data (see aggregateCompletion for
+	// the observed shape); without this the streamed usage stays zero.
+	if ru, ok := chunk["raw_usage"].(map[string]any); ok {
+		if inner, ok := ru["data"].(map[string]any); ok && len(inner) > 0 {
+			c.last = inner
+		} else if len(ru) > 0 {
+			c.last = ru
+		}
+	}
 }
 
 func (c *sseUsageCollector) detail() usage.Detail {
