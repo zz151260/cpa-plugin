@@ -223,17 +223,44 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 		}
 	}
 
-	// messages: keep system prompt from baseprompt (template has it), replace user/assistant
-	var systemMsgs []any
+	// messages: start from the template's system message, then merge in any
+	// system message the caller sent (agent harnesses put their operating
+	// instructions there), and finally append a narration nudge.
+	//
+	// Why the nudge: Qwen3.8-Flash tends to reply with reasoning + tool calls
+	// and no visible text, which reads as "worked a bit then stopped" in agent
+	// UIs that show only assistant prose between turns. Asking for a one-line
+	// intent statement before acting keeps the loop legible for the user.
+	var systemParts []string
 	if msgs, ok := base["messages"].([]any); ok {
+		kept := make([]any, 0, len(msgs))
 		for _, m := range msgs {
-			if mm, ok := m.(map[string]any); ok {
-				if role, _ := mm["role"].(string); role == "system" {
-					systemMsgs = append(systemMsgs, m)
-				}
+			mm, ok := m.(map[string]any)
+			if !ok {
+				kept = append(kept, m)
+				continue
 			}
+			if role, _ := mm["role"].(string); role == "system" {
+				if s, _ := mm["content"].(string); strings.TrimSpace(s) != "" {
+					systemParts = append(systemParts, s)
+				}
+				continue // replaced below by the merged system message
+			}
+			kept = append(kept, m)
+		}
+		base["messages"] = kept
+	}
+	for _, m := range req.Messages {
+		if m.Role == "system" && strings.TrimSpace(m.Content) != "" {
+			systemParts = append(systemParts, m.Content)
 		}
 	}
+	systemParts = append(systemParts,
+		"Before each tool call, state your intent in one short sentence in the user's language (e.g. \"I'll list the directory first\"). After finishing a multi-step task, summarise what was done in 2-3 sentences. Never stay silent between actions.")
+	systemMsgs = []any{map[string]any{
+		"role":    "system",
+		"content": strings.Join(systemParts, "\n\n"),
+	}}
 	// Append the actual conversation.
 	//
 	// Multimodal shape (matches the desktop client): an image-bearing user
@@ -242,6 +269,11 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 	// "content" as well, or sending text before the image, makes the gateway
 	// treat the message as empty.
 	for _, m := range req.Messages {
+		// System content was folded into the merged system message above;
+		// appending it again as a conversation entry would duplicate it.
+		if m.Role == "system" {
+			continue
+		}
 		if len(m.Images) == 0 {
 			systemMsgs = append(systemMsgs, map[string]any{
 				"role":    m.Role,
