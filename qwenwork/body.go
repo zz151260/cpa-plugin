@@ -187,28 +187,38 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 	nid := uuid.NewString()
 	base["request_id"] = nid
 	base["chat_record_id"] = nid
-	base["request_set_id"] = uuid.NewString()
+	base["request_set_id"] = nid
 	base["session_id"] = uuid.NewString()
 	base["stream"] = true
 	base["aliyun_user_type"] = userType
 	base["agent_id"] = "agent_common"
+	base["task_id"] = "common"
+	// The gateway expects the literal string "3" here (not a number); the
+	// upstream reference sends version:"3" alongside session_type qoder_work.
+	base["version"] = "3"
+	base["session_type"] = "qoder_work"
 
-	// model_config
+	// model_config: mirror the reference implementation's flags, notably is_vl
+	// (the gateway advertises image input only when this is true).
 	if mc, ok := base["model_config"].(map[string]any); ok {
 		mc["key"] = modelKey
+		mc["display_name"] = modelKey
+		mc["is_vl"] = true
+		mc["max_input_tokens"] = 180000
 	}
 
-	// chat_context.text.text + chat_context.extra.originalContent.text
+	// chat_context: the upstream reference uses a flat text string plus an
+	// is_vl:true modelConfig and originalContent string; keep that shape so the
+	// gateway's multimodal path engages.
 	if cc, ok := base["chat_context"].(map[string]any); ok {
-		if txt, ok := cc["text"].(map[string]any); ok {
-			txt["text"] = prompt
-		}
+		cc["text"] = prompt
+		cc["chatPrompt"] = ""
 		if extra, ok := cc["extra"].(map[string]any); ok {
-			if oc, ok := extra["originalContent"].(map[string]any); ok {
-				oc["text"] = prompt
-			}
+			extra["originalContent"] = prompt
 			if mc, ok := extra["modelConfig"].(map[string]any); ok {
 				mc["key"] = modelKey
+				mc["is_vl"] = true
+				mc["is_reasoning"] = false
 			}
 		}
 	}
@@ -224,42 +234,48 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 			}
 		}
 	}
-	// Append the actual conversation. Messages carrying images also get a
-	// "contents" array, which is how the gateway receives multimodal input;
-	// text-only messages keep the plain "content" shape the template uses.
-	var allImages []map[string]any
+	// Append the actual conversation.
+	//
+	// Multimodal shape (matches the desktop client): an image-bearing user
+	// message moves ALL of its content into a "contents" array, leaves "content"
+	// as an EMPTY string, and orders the parts image-first then text. Filling
+	// "content" as well, or sending text before the image, makes the gateway
+	// treat the message as empty.
 	for _, m := range req.Messages {
-		entry := map[string]any{
-			"role":    m.Role,
-			"content": m.Content,
+		if len(m.Images) == 0 {
+			systemMsgs = append(systemMsgs, map[string]any{
+				"role":    m.Role,
+				"content": m.Content,
+			})
+			continue
 		}
-		if len(m.Images) > 0 {
-			contents := make([]map[string]any, 0, len(m.Images)+1)
-			if m.Content != "" {
-				contents = append(contents, map[string]any{"type": "text", "text": m.Content})
-			}
-			for _, img := range m.Images {
-				src := map[string]any{"type": "base64", "media_type": img.MediaType, "data": img.Base64}
-				if img.Base64 == "" {
-					src = map[string]any{"type": "url", "url": img.URL}
+		parts := make([]map[string]any, 0, len(m.Images)+1)
+		for _, img := range m.Images {
+			url := img.URL
+			if url == "" && img.Base64 != "" {
+				mt := img.MediaType
+				if mt == "" {
+					mt = "image/png"
 				}
-				contents = append(contents, map[string]any{"type": "image", "source": src})
-				allImages = append(allImages, map[string]any{"source": src})
+				url = "data:" + mt + ";base64," + img.Base64
 			}
-			entry["contents"] = contents
+			parts = append(parts, map[string]any{
+				"type":      "image_url",
+				"image_url": map[string]any{"url": url},
+			})
 		}
-		systemMsgs = append(systemMsgs, entry)
+		if m.Content != "" {
+			parts = append(parts, map[string]any{"type": "text", "text": m.Content})
+		}
+		systemMsgs = append(systemMsgs, map[string]any{
+			"role":                    m.Role,
+			"content":                 "",
+			"contents":                parts,
+			"response_meta":           map[string]any{"id": "", "usage": map[string]any{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}},
+			"reasoning_content_signature": "",
+		})
 	}
 	base["messages"] = systemMsgs
-
-	// Top-level image_urls mirrors the images of this turn; the gateway reads it
-	// in addition to the per-message contents.
-	if len(allImages) > 0 {
-		base["image_urls"] = allImages
-		if cc, ok := base["chat_context"].(map[string]any); ok {
-			cc["imageUrls"] = allImages
-		}
-	}
 
 	// business
 	if biz, ok := base["business"].(map[string]any); ok {
