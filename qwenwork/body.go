@@ -257,7 +257,7 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 	}
 	systemParts = append(systemParts,
 		"Before each tool call, state your intent in one short sentence in the user's language (e.g. \"I'll list the directory first\"). After finishing a multi-step task, summarise what was done in 2-3 sentences. Never stay silent between actions.")
-	systemMsgs = []any{map[string]any{
+	systemMsgs := []any{map[string]any{
 		"role":    "system",
 		"content": strings.Join(systemParts, "\n\n"),
 	}}
