@@ -143,6 +143,12 @@ type openAIRequest struct {
 	Model    string          `json:"model"`
 	Messages []openAIMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
+	// Tools are forwarded verbatim. The agent harness defines them and decides
+	// which the model may call; substituting a fixed list makes every tool the
+	// model actually wants (Agent, AskUserQuestion, …) unavailable, so the model
+	// answers with prose instead of a tool call and the agent loop ends early.
+	Tools      []json.RawMessage `json:"tools"`
+	ToolChoice json.RawMessage   `json:"tool_choice"`
 }
 
 // extractLatestUserPrompt returns the content of the last user message.
@@ -313,6 +319,16 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 		})
 	}
 	base["messages"] = systemMsgs
+
+	// Tools and tool_choice: pass the caller's own definitions through. The
+	// template's fixed Qoder tool list is only a fallback for callers that send
+	// none (e.g. a plain OpenAI chat client).
+	if len(req.Tools) > 0 {
+		base["tools"] = req.Tools
+	}
+	if len(req.ToolChoice) > 0 {
+		base["tool_choice"] = req.ToolChoice
+	}
 
 	// business
 	if biz, ok := base["business"].(map[string]any); ok {
