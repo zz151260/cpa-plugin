@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,10 +43,57 @@ func cpaToUpstreamKey(cpaModel string) string {
 	return cpaModel
 }
 
-// openAIMessage is one message in the OpenAI chat completion format.
+// openAIMessage is one message in the chat completion format. Content accepts
+// both shapes seen in practice:
+//
+//	"content": "text"                                  (OpenAI chat completions)
+//	"content": [{"type":"text","text":"…"}]            (Anthropic messages)
+//
+// The Anthropic form is what the CPA /v1/messages front end forwards, so a
+// plain string field here makes every such request fail with
+// "cannot unmarshal array into Go struct field".
 type openAIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string
+	Content string
+}
+
+// UnmarshalJSON decodes either a bare string or an array of typed content parts,
+// concatenating the text parts. Unknown part types are skipped rather than
+// erroring, so an image or tool part does not sink an otherwise valid prompt.
+func (m *openAIMessage) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.Role = raw.Role
+	if len(raw.Content) == 0 {
+		return nil
+	}
+	// String form.
+	var s string
+	if err := json.Unmarshal(raw.Content, &s); err == nil {
+		m.Content = s
+		return nil
+	}
+	// Array-of-parts form.
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw.Content, &parts); err != nil {
+		return fmt.Errorf("message content must be a string or an array of parts: %w", err)
+	}
+	var sb strings.Builder
+	for _, p := range parts {
+		if p.Text != "" {
+			sb.WriteString(p.Text)
+		}
+	}
+	m.Content = sb.String()
+	return nil
 }
 
 // openAIRequest is the CPA-facing chat completion request.
