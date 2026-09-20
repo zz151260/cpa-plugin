@@ -256,7 +256,12 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 		}
 	}
 	systemParts = append(systemParts,
-		"Before each tool call, state your intent in one short sentence in the user's language (e.g. \"I'll list the directory first\"). After finishing a multi-step task, summarise what was done in 2-3 sentences. Never stay silent between actions.")
+		"Before each tool call, state your intent in one short sentence in the user's language (e.g. \"I'll list the directory first\"). "+
+			"After finishing a multi-step task, summarise what was done in 2-3 sentences. Never stay silent between actions. "+
+			"IMPORTANT — keep working until the task is actually finished: when you still have steps left, or when you just described what to do next, "+
+			"emit the tool call for that next step in the SAME reply instead of ending your turn with commentary. "+
+			"End your turn only when the whole task is done, or when you genuinely need a decision only the user can make (then ask a direct question). "+
+			"Never stop mid-task with only a progress note.")
 	systemMsgs := []any{map[string]any{
 		"role":    "system",
 		"content": strings.Join(systemParts, "\n\n"),
