@@ -693,6 +693,7 @@ func handleExecExecute(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
 	}
+	dumpDiagnostic("stream-out", body)
 	// QwenWorkCN takes the body as plain JSON. QoderEncoding is a QoderWork-only
 	// wire optimisation and is rejected here (400 "Invalid agent chat JSON body").
 	bodyStr := string(body)
@@ -743,13 +744,20 @@ func stripProviderPrefix(model string) string {
 // observed from the upstream side (the host rewrites requests before they
 // reach the plugin). It never alters the request and silently gives up on any
 // error, so it is safe to leave in place during debugging and to delete after.
+//
+// The target directory can be overridden with QWENWORK_DUMP_DIR; when unset it
+// falls back to <user-home>/.cli-proxy-api/qw-dump on Windows.
 func dumpDiagnostic(tag string, payload []byte) {
 	if len(payload) == 0 {
 		return
 	}
 	dir := os.Getenv("QWENWORK_DUMP_DIR")
 	if dir == "" {
-		return
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		dir = filepath.Join(home, ".cli-proxy-api", "qw-dump")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
@@ -804,6 +812,7 @@ func handleExecStream(raw []byte) ([]byte, error) {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "body build: "+err.Error())
 		return nil, fmt.Errorf("body build: %w", err)
 	}
+	dumpDiagnostic("stream-out", body)
 	// Plain JSON body — see handleExecExecute for why QoderEncoding is not used.
 	bodyStr := string(body)
 
