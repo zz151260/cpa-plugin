@@ -229,6 +229,18 @@ func clientNeedsSSEFrame(metadata map[string]any) bool {
 	}
 }
 
+// hasUsage reports whether a chunk carries a non-empty token usage object
+// under either the standard "usage" key or the gateway's "raw_usage".
+func hasUsage(obj map[string]any) bool {
+	if u, ok := obj["usage"].(map[string]any); ok && len(u) > 0 {
+		return true
+	}
+	if ru, ok := obj["raw_usage"].(map[string]any); ok && len(ru) > 0 {
+		return true
+	}
+	return false
+}
+
 // hoistRawUsage renames QwenWorkCN's "raw_usage"."data" object to the
 // OpenAI-standard "usage" key so downstream format translation reports real
 // token counts. Chunks without raw_usage (or with an unparsable body) are
@@ -298,15 +310,20 @@ func cleanChunkJSON(s string) string {
 					changed = true
 				}
 			}
-			// Drop a fully-empty delta ONLY when the choice carries no other
-			// signal (no finish_reason): e.g. {"delta":{"function_call":null}}
-			// reduced to {}. A delta with role/content:"" is meaningful and
-			// never reaches this branch (those fields are preserved above).
-			if len(delta) == 0 {
-				if fr, _ := choice["finish_reason"].(string); fr == "" {
-					return ""
-				}
+		// Drop a fully-empty delta ONLY when the choice carries no other
+		// signal (no finish_reason): e.g. {"delta":{"function_call":null}}
+		// reduced to {}. A delta with role/content:"" is meaningful and
+		// never reaches this branch (those fields are preserved above).
+		//
+		// The frame is also kept when it carries token usage: the gateway
+		// reports usage on a near-empty trailing frame, and dropping it makes
+		// every streamed response report zero tokens — the agent loop in
+		// usage-gated clients then stops after one turn.
+		if len(delta) == 0 {
+			if fr, _ := choice["finish_reason"].(string); fr == "" && !hasUsage(obj) {
+				return ""
 			}
+		}
 		}
 	}
 	if !changed {
