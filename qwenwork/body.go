@@ -43,6 +43,14 @@ func cpaToUpstreamKey(cpaModel string) string {
 	return cpaModel
 }
 
+// imagePart is one image carried by a user message. Either Base64 (with
+// MediaType) or URL is set.
+type imagePart struct {
+	Base64    string
+	MediaType string
+	URL       string
+}
+
 // openAIMessage is one message in the chat completion format. Content accepts
 // both shapes seen in practice:
 //
@@ -52,14 +60,20 @@ func cpaToUpstreamKey(cpaModel string) string {
 // The Anthropic form is what the CPA /v1/messages front end forwards, so a
 // plain string field here makes every such request fail with
 // "cannot unmarshal array into Go struct field".
+//
+// Text parts are concatenated into Content; image parts are kept in Images so
+// buildQwenBody can forward them upstream (the gateway takes images separately
+// from the prompt text).
 type openAIMessage struct {
 	Role    string
 	Content string
+	Images  []imagePart
 }
 
-// UnmarshalJSON decodes either a bare string or an array of typed content parts,
-// concatenating the text parts. Unknown part types are skipped rather than
-// erroring, so an image or tool part does not sink an otherwise valid prompt.
+// UnmarshalJSON decodes either a bare string or an array of typed content parts.
+// Text parts are concatenated; image parts are collected. Unknown part types are
+// skipped rather than erroring, so an unsupported part does not sink an
+// otherwise valid prompt.
 func (m *openAIMessage) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Role    string          `json:"role"`
@@ -80,16 +94,44 @@ func (m *openAIMessage) UnmarshalJSON(data []byte) error {
 	}
 	// Array-of-parts form.
 	var parts []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		Source struct {
+			Type      string `json:"type"` // "base64" | "url"
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+			URL       string `json:"url"`
+		} `json:"source"`
+		// OpenAI-style image part
+		ImageURL struct {
+			URL string `json:"url"`
+		} `json:"image_url"`
 	}
 	if err := json.Unmarshal(raw.Content, &parts); err != nil {
 		return fmt.Errorf("message content must be a string or an array of parts: %w", err)
 	}
 	var sb strings.Builder
 	for _, p := range parts {
-		if p.Text != "" {
-			sb.WriteString(p.Text)
+		switch p.Type {
+		case "image", "image_url":
+			img := imagePart{MediaType: p.Source.MediaType, URL: p.Source.URL}
+			switch p.Source.Type {
+			case "base64":
+				img.Base64 = p.Source.Data
+			case "url":
+				img.URL = p.Source.URL
+			}
+			// OpenAI-shaped part carries the URL here instead.
+			if img.URL == "" && p.ImageURL.URL != "" {
+				img.URL = p.ImageURL.URL
+			}
+			if img.Base64 != "" || img.URL != "" {
+				m.Images = append(m.Images, img)
+			}
+		default:
+			if p.Text != "" {
+				sb.WriteString(p.Text)
+			}
 		}
 	}
 	m.Content = sb.String()
@@ -104,13 +146,27 @@ type openAIRequest struct {
 }
 
 // extractLatestUserPrompt returns the content of the last user message.
+// extractLatestUserPrompt returns the text of the newest user message that has
+// any. It walks backwards rather than returning the last user message blindly,
+// because an image-only turn would otherwise yield "" and leave the gateway's
+// prompt fields empty.
 func extractLatestUserPrompt(messages []openAIMessage) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
+		if messages[i].Role == "user" && messages[i].Content != "" {
 			return messages[i].Content
 		}
 	}
 	return ""
+}
+
+// requestHasImages reports whether any message carries an image part.
+func requestHasImages(messages []openAIMessage) bool {
+	for _, m := range messages {
+		if len(m.Images) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // buildQwenBody renders the upstream agent_chat_generation body for one request.
@@ -122,7 +178,9 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 	}
 
 	prompt := extractLatestUserPrompt(req.Messages)
-	if prompt == "" {
+	// An image-only turn has no text, which is valid multimodal input — only
+	// reject when there is neither text nor an image anywhere in the request.
+	if prompt == "" && !requestHasImages(req.Messages) {
 		return nil, fmt.Errorf("no user message in request")
 	}
 
@@ -166,14 +224,42 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 			}
 		}
 	}
-	// Append the actual conversation
+	// Append the actual conversation. Messages carrying images also get a
+	// "contents" array, which is how the gateway receives multimodal input;
+	// text-only messages keep the plain "content" shape the template uses.
+	var allImages []map[string]any
 	for _, m := range req.Messages {
-		systemMsgs = append(systemMsgs, map[string]any{
+		entry := map[string]any{
 			"role":    m.Role,
 			"content": m.Content,
-		})
+		}
+		if len(m.Images) > 0 {
+			contents := make([]map[string]any, 0, len(m.Images)+1)
+			if m.Content != "" {
+				contents = append(contents, map[string]any{"type": "text", "text": m.Content})
+			}
+			for _, img := range m.Images {
+				src := map[string]any{"type": "base64", "media_type": img.MediaType, "data": img.Base64}
+				if img.Base64 == "" {
+					src = map[string]any{"type": "url", "url": img.URL}
+				}
+				contents = append(contents, map[string]any{"type": "image", "source": src})
+				allImages = append(allImages, map[string]any{"source": src})
+			}
+			entry["contents"] = contents
+		}
+		systemMsgs = append(systemMsgs, entry)
 	}
 	base["messages"] = systemMsgs
+
+	// Top-level image_urls mirrors the images of this turn; the gateway reads it
+	// in addition to the per-message contents.
+	if len(allImages) > 0 {
+		base["image_urls"] = allImages
+		if cc, ok := base["chat_context"].(map[string]any); ok {
+			cc["imageUrls"] = allImages
+		}
+	}
 
 	// business
 	if biz, ok := base["business"].(map[string]any); ok {
