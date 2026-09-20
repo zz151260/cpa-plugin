@@ -59,10 +59,14 @@ import "C"
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -734,6 +738,32 @@ func stripProviderPrefix(model string) string {
 	return model
 }
 
+// dumpDiagnostic appends one inbound payload to a scratch file for offline
+// inspection. It exists to diagnose agent-loop behaviour that cannot be
+// observed from the upstream side (the host rewrites requests before they
+// reach the plugin). It never alters the request and silently gives up on any
+// error, so it is safe to leave in place during debugging and to delete after.
+func dumpDiagnostic(tag string, payload []byte) {
+	if len(payload) == 0 {
+		return
+	}
+	dir := os.Getenv("QWENWORK_DUMP_DIR")
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, tag+".jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sum := sha256.Sum256(payload)
+	fmt.Fprintf(f, "{\"at\":%q,\"sha256\":%q,\"payload\":%s}\n",
+		time.Now().UTC().Format(time.RFC3339), hex.EncodeToString(sum[:8]), payload)
+}
+
 // executorStreamRequest wraps the host's executor.execute_stream RPC: the
 // ExecutorRequest plus the async stream id the host uses to receive chunks.
 type executorStreamRequest struct {
@@ -763,6 +793,7 @@ func handleExecStream(raw []byte) ([]byte, error) {
 	if len(bodyRaw) == 0 {
 		bodyRaw = req.OriginalRequest
 	}
+	dumpDiagnostic("stream-in", bodyRaw)
 	qwReq := &openAIRequest{}
 	if err := json.Unmarshal(bodyRaw, qwReq); err != nil && len(bodyRaw) > 0 {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "payload parse: "+err.Error())
