@@ -22,7 +22,7 @@
     {
       "id": "qwenwork",
       "name": "QwenWork",
-      "description": "QwenWorkCN (千问办公, gateway.qwenwork.cn) provider for CLIProxyAPI: dual login (OAuth device authorization with auto pro-pack claim + PAT import), COSY-signed chat executor, dynamic model list, daily check-in with credit snapshot, token keepalive (deviceToken/jobToken prefix-routed, PAT fallback), accounts panel.",
+      "description": "QwenWorkCN (千问办公, gateway.qwenwork.cn) provider for CLIProxyAPI: login by converting the desktop client's auth-v2.dat into a plugin auth file (tools/make_auth.py; OAuth device authorization returns 400 and PAT endpoints 404 on this gateway), COSY-signed chat executor, dynamic model list, daily check-in with credit snapshot, token keepalive (deviceToken/jobToken prefix-routed, PAT fallback), accounts panel.",
       "author": "Sliverkiss",
       "version": "0.5.0",
       "repository": "https://github.com/Sliverkiss/cpa-plugin",

@@ -15,20 +15,23 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
-// wbModels is the static fallback model list for QwenWorkCN. The service exposes
-// capability tiers rather than named models, and only one tier is routable for
-// the accounts tested: "qwork-advanced", which resolves to glm-5.2 upstream
-// (confirmed by the X-Model-Name response header).
+// wbModels is the static fallback model list for QwenWorkCN, mirroring the
+// authoritative "qwork" array from GET /algo/api/v2/model/list (verified
+// 2026-09-18). The service exposes exactly three tiers, matching its desktop
+// client's picker; the numeric context windows come from each entry's
+// context_config (1M default for all three).
 //
-// "qwork-lite" is deliberately absent: the gateway answers
-// 403 "Model is not available for this user" for it, so listing it would only
-// offer a model that always fails. Add it back if an account reports access.
+// IDs are the upstream tier keys, so no remapping is needed at request time.
+// The earlier "qwork-advanced"/"qwork-lite" identifiers were plugin inventions
+// and have been dropped.
 //
-// Dynamic refresh via /algo/api/v2/model/list replaces this at runtime when an
+// Dynamic refresh via the same endpoint replaces this at runtime once an
 // account is present.
 func wbModels() []pluginapi.ModelInfo {
 	return []pluginapi.ModelInfo{
-		{ID: "qwork-advanced", Name: "QwenWork Advanced (glm-5.2)", ContextLength: 180000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
+		{ID: "pro", Name: "高级 (Pro) · 1X", ContextLength: 1000000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
+		{ID: "flash", Name: "标准 Qwen3.8-Flash · 0.1X", ContextLength: 1000000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
+		{ID: "qwen3.8-max-preview", Name: "Qwen3.8-Max · 1.8X", ContextLength: 1000000, MaxCompletionTokens: 8192, OwnedBy: providerName, SupportedGenerationMethods: []string{"chat"}},
 	}
 }
 

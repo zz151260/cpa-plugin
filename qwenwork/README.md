@@ -1,6 +1,6 @@
 # QwenWork CPA 插件（千问办公）
 
-[CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 QoderWork（qoder.com.cn，CN 区）Provider 插件：多账号 OAuth/PAT 双登录、动态模型、COSY 签名推理、每日签到、积分面板、token 自动保活。
+[CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 QwenWork（gateway.qwenwork.cn，CN 区）Provider 插件：多账号 OAuth/PAT 双登录、动态模型、COSY 签名推理、每日签到、积分面板、token 自动保活。
 
 ## 功能
 
@@ -8,7 +8,7 @@
 |---|---|
 | **双登录方式** | ① OAuth 设备授权（PKCE，浏览器授权，dt- 30 天 + drt- 1 年自动旋转）② PAT 导入（pt-，长期有效兜底）——两家族可共存于同一 auth 文件 |
 | **登录自动领包** | OAuth 登录成功后自动判断并领取一次性 Pro 升级包（eligibility → claim） |
-| **COSY 推理** | RSA 包 AES 会话密钥 + MD5 请求签名，对接 gateway.qoder.com.cn SSE 流式 |
+| **COSY 推理** | RSA 包 AES 会话密钥 + MD5 请求签名，对接 gateway.qwenwork.cn SSE 流式 |
 | **动态模型** | COSY 拉取 `/algo/api/v2/model/list`（chat scene），10 静态模型兜底 |
 | **每日签到** | 面板手动签到（单账号/批量）+ 09:00/21:00 定时自动签到，签到后返回最新积分快照 |
 | **积分面板** | 账号卡片：昵称/积分/计划/签到状态/操作（签到/刷新/选用） |
@@ -21,7 +21,7 @@
 
 ```bash
 # 按你的平台下载（示例 linux/arm64）
-unzip qoderwork_0.2.6_linux_arm64.zip
+unzip qwenwork_0.5.0_linux_arm64.zip
 cp qwenwork.so /path/to/cliproxyapi/plugins/qwenwork.so
 ```
 
@@ -29,7 +29,7 @@ cp qwenwork.so /path/to/cliproxyapi/plugins/qwenwork.so
 
 ```bash
 cd qwenwork
-CGO_ENABLED=1 go build -buildmode=c-shared -ldflags "-X main.version=0.2.6" -o qwenwork.so .
+CGO_ENABLED=1 go build -buildmode=c-shared -ldflags "-X main.version=0.5.0" -o qwenwork.so .
 cp qwenwork.so /path/to/cliproxyapi/plugins/
 ```
 
@@ -45,7 +45,7 @@ plugins:
 
 # 模型别名（可选）
 oauth-model-alias:
-  qoderwork:
+  qwenwork:
     - name: qmodel_preview
       alias: qoder/qwen3.8-max
     - name: qmodel_latest
@@ -56,13 +56,13 @@ oauth-model-alias:
 
 ### 方式一：OAuth 登录（推荐）
 
-1. CPA 管理面板 → Auth 文件 → QoderWork OAuth 登录卡片
-2. 浏览器打开授权链接 → 登录 qoder.com.cn（阿里云 SSO）→ 点 Continue 授权
+1. CPA 管理面板 → Auth 文件 → QwenWork OAuth 登录卡片
+2. 浏览器打开授权链接 → 登录 gateway.qwenwork.cn（阿里云 SSO）→ 点 Continue 授权
 3. 插件自动轮询拿 token 落盘（dt-/drt-），并自动领取 Pro 升级包（若 eligible）
 
 ### 方式二：PAT 导入
 
-1. qoder.com.cn → 设置 → Personal Access Token → 创建（pt- 开头）
+1. gateway.qwenwork.cn → 设置 → Personal Access Token → 创建（pt- 开头）
 2. 插件面板（`/v0/resource/plugins/qwenwork/panel`）→ 右上角「导入 QwenWork 凭据」→ 粘贴 PAT → 导入
 3. 插件自动换 jobToken（jt-/jrt-）落盘
 
@@ -92,7 +92,7 @@ auth 文件字段（可共存）：
 
 ## 参考文档
 
-- [KNOWLEDGE.md](../KNOWLEDGE.md) — QoderWork API 逆向全记录（COSY 签名/编码/端点）
+- [KNOWLEDGE.md](../KNOWLEDGE.md) — QwenWork API 逆向全记录（COSY 签名/编码/端点）
 - [analysis/api-endpoints-scan.md](../analysis/api-endpoints-scan.md) — 客户端全端点扫描
 - [analysis/qoderwork-real-oauth.md](../analysis/qoderwork-real-oauth.md) — OAuth 设备授权流程 + 本地测试证据
 

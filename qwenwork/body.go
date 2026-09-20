@@ -18,16 +18,26 @@ import (
 var basepromptJSON []byte
 
 // cpaToUpstreamKey maps CPA-facing model names to the tier keys QwenWorkCN
-// recognises. The gateway routes tiers, not concrete models: "qwork-advanced"
-// lands on glm-5.2 / maas-glm (verified 2026-09-13 via the X-Model-Name response
-// header), while "qwork-lite" answers 403 "Model is not available for this user"
-// on an enterprise account. Unknown names pass through unchanged.
+// recognises. The gateway routes tiers, not concrete models — the authoritative
+// list comes from GET /algo/api/v2/model/list, whose "qwork" array contains
+// exactly three entries (verified 2026-09-18, matching the desktop client's
+// picker):
+//
+//	pro                  高级                1X    default, balanced
+//	flash                标准｜Qwen3.8-Flash  0.1X  fastest
+//	qwen3.8-max-preview  Qwen3.8-Max         1.8X  strongest
+//
+// The first two accept friendly aliases so callers can use readable names.
+// Note the older "qwork-advanced"/"qwork-lite" names were plugin inventions:
+// upstream never used them, and "qwork-lite" was never routable at all.
 func cpaToUpstreamKey(cpaModel string) string {
 	switch cpaModel {
-	case "qwenwork-auto", "auto", "qwork-advanced", "qwork", "glm-5.2":
-		return "qwork-advanced"
-	case "qwork-lite", "lite":
-		return "qwork-lite"
+	case "qwork-pro", "advanced", "qwork-advanced", "qwenwork-auto":
+		return "pro"
+	case "qwork-flash", "standard", "qwen3.8-flash":
+		return "flash"
+	case "qwork-max", "qwen3.8-max":
+		return "qwen3.8-max-preview"
 	}
 	return cpaModel
 }
