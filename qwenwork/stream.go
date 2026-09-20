@@ -196,6 +196,12 @@ func collectUpstreamStreamQwen(bodyStr string, sa *storedAuth, modelKey string, 
 		if cleaned == "" {
 			continue
 		}
+		// The gateway reports token counts as raw_usage.data, but CPA's format
+		// translators only read "usage". Rename it in the passthrough chunk so
+		// the Anthropic/Claude translation carries real token counts — without
+		// this every streamed response reports zeros, and clients that gate
+		// their agent loop on usage stop after the first turn.
+		cleaned = hoistRawUsage(cleaned)
 		if sseFramed {
 			cleaned = "data: " + cleaned
 		}
@@ -221,6 +227,35 @@ func clientNeedsSSEFrame(metadata map[string]any) bool {
 	default:
 		return true
 	}
+}
+
+// hoistRawUsage renames QwenWorkCN's "raw_usage"."data" object to the
+// OpenAI-standard "usage" key so downstream format translation reports real
+// token counts. Chunks without raw_usage (or with an unparsable body) are
+// returned unchanged.
+func hoistRawUsage(s string) string {
+	var obj map[string]any
+	if json.Unmarshal([]byte(s), &obj) != nil {
+		return s
+	}
+	ru, ok := obj["raw_usage"].(map[string]any)
+	if !ok {
+		return s
+	}
+	detail, ok := ru["data"].(map[string]any)
+	if !ok || len(detail) == 0 {
+		return s
+	}
+	if _, exists := obj["usage"]; exists {
+		return s
+	}
+	obj["usage"] = detail
+	delete(obj, "raw_usage")
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return s
+	}
+	return string(out)
 }
 
 // cleanChunkJSON strips only the known-problematic empty tool-call shells
