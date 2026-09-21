@@ -683,6 +683,7 @@ func handleExecExecute(raw []byte) ([]byte, error) {
 	// Build the QoderWork agent_chat_generation body from the OpenAI request,
 	// then QoderEncoding-encode it. The template embeds a 10657-token system
 	// prompt that the server requires for normal behaviour (KNOWLEDGE §5.2).
+	dumpDiagnostic("stream-in", req.Payload)
 	qwReq := &openAIRequest{}
 	if err := json.Unmarshal(req.Payload, qwReq); err != nil && len(req.Payload) > 0 {
 		publishUsage(req.Model, upstreamModel, authUID, started, usage.Detail{}, true, 0, "payload parse: "+err.Error())
