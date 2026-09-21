@@ -51,23 +51,24 @@ type imagePart struct {
 	URL       string
 }
 
-// openAIMessage is one message in the chat completion format. Content accepts
-// both shapes seen in practice:
+// openAIMessage is one message in the chat completion format.
 //
-//	"content": "text"                                  (OpenAI chat completions)
-//	"content": [{"type":"text","text":"…"}]            (Anthropic messages)
+// Tool-calling turns rely on three fields beyond role/content, and dropping any
+// of them breaks the agent loop:
 //
-// The Anthropic form is what the CPA /v1/messages front end forwards, so a
-// plain string field here makes every such request fail with
-// "cannot unmarshal array into Go struct field".
+//	assistant.tool_calls   the calls the model asked for, each with an id
+//	tool.tool_call_id      which call this result answers
+//	tool.name              which tool produced the result
 //
-// Text parts are concatenated into Content; image parts are kept in Images so
-// buildQwenBody can forward them upstream (the gateway takes images separately
-// from the prompt text).
+// Without tool_call_id the model receives results it cannot pair with its own
+// calls, so it stops calling tools and the loop ends mid-task.
 type openAIMessage struct {
-	Role    string
-	Content string
-	Images  []imagePart
+	Role       string
+	Content    string
+	Images     []imagePart
+	ToolCalls  json.RawMessage // assistant: array of {id,type,function{name,arguments}}
+	ToolCallID string          // tool: id of the call being answered
+	Name       string          // tool: name of the tool that ran
 }
 
 // UnmarshalJSON decodes either a bare string or an array of typed content parts.
@@ -76,13 +77,19 @@ type openAIMessage struct {
 // otherwise valid prompt.
 func (m *openAIMessage) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
+		Role       string          `json:"role"`
+		Content    json.RawMessage `json:"content"`
+		ToolCalls  json.RawMessage `json:"tool_calls"`
+		ToolCallID string          `json:"tool_call_id"`
+		Name       string          `json:"name"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	m.Role = raw.Role
+	m.ToolCalls = raw.ToolCalls
+	m.ToolCallID = raw.ToolCallID
+	m.Name = raw.Name
 	if len(raw.Content) == 0 {
 		return nil
 	}
@@ -286,10 +293,22 @@ func buildQwenBody(req *openAIRequest, modelKey, userType string) ([]byte, error
 			continue
 		}
 		if len(m.Images) == 0 {
-			systemMsgs = append(systemMsgs, map[string]any{
+			entry := map[string]any{
 				"role":    m.Role,
 				"content": m.Content,
-			})
+			}
+			// Tool-calling fields must survive verbatim: without them the model
+			// cannot match a result to the call that asked for it.
+			if len(m.ToolCalls) > 0 && string(m.ToolCalls) != "null" {
+				entry["tool_calls"] = m.ToolCalls
+			}
+			if m.ToolCallID != "" {
+				entry["tool_call_id"] = m.ToolCallID
+			}
+			if m.Name != "" {
+				entry["name"] = m.Name
+			}
+			systemMsgs = append(systemMsgs, entry)
 			continue
 		}
 		parts := make([]map[string]any, 0, len(m.Images)+1)
